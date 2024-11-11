@@ -171,7 +171,7 @@ def get_base_url(url):
 
 if __name__ == "__main__":
     start_urls = [
-       'https://www.idealista.com/en/geo/venta-viviendas/andalucia/con-precio-hasta_80000,precio-desde_60000,de-un-dormitorio,un-bano/',
+       'https://www.idealista.com/en/geo/venta-viviendas/andalucia/',
         # Add more URLs as needed
     ]
     
