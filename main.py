@@ -1,199 +1,138 @@
 import requests
 from bs4 import BeautifulSoup
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+import json
+import math
+import re
 import pandas as pd
-from urllib.parse import urlparse
 import os
+from urllib.parse import urlparse, urljoin
 
-# Create session
-session = requests.Session()
-session.cookies.set('SESSION', 'fba8d6cc5f6e779c~11df0d86-55c8-430a-adcd-31462fa86b5d', domain='www.idealista.com')
-session.cookies.set('contact11df0d86-55c8-430a-adcd-31462fa86b5d', "{'maxNumberContactsAllow':10}", domain='www.idealista.com')
-session.cookies.set('datadome', 'zFZAxUR0ZjVnC0qHV5Ii4Q3C2JVF3so5CEVaoDfRJ14~7AE6z5iaOxoViIidN9G1qPiJLWq9R2BSDmDzjfnw5AJ8bBjmM9_VizlB3ekWdBTtN3dzEUzh84fUTT3X7in6', domain='www.idealista.com')
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36",
-    "Accept-Encoding": "gzip, deflate",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "DNT": "1",
-    "Connection": "close",
-    "Upgrade-Insecure-Requests": "1"
-}
+# Function to scrape property URLs from a base URL
+def scrape_property_urls(base_url):
+    response = requests.get(base_url)
+    soup = BeautifulSoup(response.content, "html.parser")
 
-def get_lat_lon_from_address(address):
-    geolocator = Nominatim(user_agent="username")
-    try:
-        location = geolocator.geocode(address, timeout=10)
-        if location:
-            return location.latitude, location.longitude
-        else:
-            return None, None
-    except (GeocoderTimedOut, GeocoderServiceError) as e:
-        print(f"Error: {e}")
-        return None, None
-
-def get_anchor_tags(url):
-    links = []
-    page_number = 1
-    while url:
-        r = session.get(url, headers=headers)
-        if r.status_code == 200:
-            soup = BeautifulSoup(r.content, "lxml")
-            anchor_tags = soup.find_all('a', class_='item-link')
-            page_links = []
-            for tag in anchor_tags:
-                href = tag.get('href')
-                if not href.startswith('http'):
-                    href = 'https://www.idealista.com' + href
-                page_links.append({'href': href})
-            links.extend(page_links)
-            print(f"Page {page_number} - Number of anchor tags: {len(page_links)}")
-
-            next_page_tag = soup.find('li', class_='next')
-            if next_page_tag:
-                next_page_link = next_page_tag.find('a')
-                if next_page_link and 'href' in next_page_link.attrs:
-                    url = next_page_link['href']
-                    if not url.startswith('http'):
-                        url = 'https://www.idealista.com' + url
-                else:
-                    url = None
-            else:
-                url = None
-
-            page_number += 1
-        else:
-            print(f"Failed to retrieve the page, status code: {r.status_code}")
-            break
-    return links
-
-def get_property_type_from_url(base_url):
-    keywords = {
-        "viviendas": "housing",
-        "oficinas": "offices",
-        "locales o naves": "premises or warehouses",
-        "traspasos": "transfers",
-        "garajes": "garage",
-        "terrenos": "land",
-        "trasteros": "storerooms",
-        "edificios": "building"
-    }
-    for keyword, property_type in keywords.items():
-        if keyword in base_url:
-            return property_type
-    return "unknown"
-
-def get_transaction_type_from_url(base_url):
-    if "venta" in base_url:
-        return "sale"
-    elif "alquiler" in base_url:
-        return "rent"
-    return "unknown"
-
-def clean_features(features):
-    cleaned_features = []
-    for feature in features:
-        feature = ' '.join(feature.split()).replace(" \n", "").strip()
-        cleaned_features.append(feature)
-    return cleaned_features
-
-def get_property_details(property_url, transaction_type, property_type):
-    r = session.get(property_url, headers=headers)
-    if r.status_code == 200:
-        soup = BeautifulSoup(r.content, "lxml")
-        
-        # Name
-        name_tag = soup.find('span', class_='main-info__title-main')
-        name = name_tag.text.strip() if name_tag else None
-        
-        # Address
-        address_list = []
-        header_map = soup.find('div', id='headerMap')
-        if header_map:
-            for li in header_map.find_all('li', class_='header-map-list'):
-                address_list.append(li.get_text(strip=True))
-        address = ', '.join(address_list) if address_list else None
-
-        # Price
-        price_tag = soup.find('strong', class_='price')
-        price = price_tag.text.strip() if price_tag else None
-
-        # Description
-        description = None
-        comment_tag = soup.find('div', class_='comment')
-        if comment_tag:
-            description_paragraph = comment_tag.find('p')
-            if description_paragraph:
-                description = description_paragraph.get_text(separator="\n").strip()
-
-        # Properties
-        properties_tag = soup.find('div', class_='details-property')
-        properties = []
-        if properties_tag:
-            for ul in properties_tag.find_all('ul'):
-                for li in ul.find_all('li'):
-                    properties.append(li.text.strip())
-
-        latitude, longitude = get_lat_lon_from_address(address) if address else (None, None)
-
-        # Features
-        features = []
-        features_tag = soup.find('div', class_='info-features')
-        if features_tag:
-            for span in features_tag.find_all('span'):
-                features.append(span.text.strip())
-
-        cleaned_features = clean_features(features)
-
-        energy_certificate = {'consumption': None, 'emissions': None}
-
-        return {
-            'url': property_url,
-            'name': name,
-            'address': address,
-            'price': price,
-            'description': description,
-            'properties': properties,
-            'features': cleaned_features,
-            'transaction_type': transaction_type,
-            'property_type': property_type,
-            'latitude': latitude,
-            'longitude': longitude,
-            'energy_certificate': energy_certificate
-        }
+    # Find the number of listings to calculate pagination
+    search_subtitle_div = soup.find("div", class_="a-search-subtitle search-results-nb")
+    if search_subtitle_div:
+        number_of_listings = int(search_subtitle_div.find("span").text.strip().replace(" ", ""))
     else:
-        print(f"Failed to retrieve the property page, status code: {r.status_code}")
-        return None
+        print("Could not find the number of listings.")
+        number_of_listings = 1
 
-def get_base_url(url):
-    parsed_url = urlparse(url)
-    return parsed_url.netloc
+    # Calculate the total number of pages (assuming 20 listings per page)
+    listings_per_page = 20
+    total_pages = math.ceil(number_of_listings / listings_per_page)
+    print(f"Total pages: {total_pages}")
 
+    # Initialize a set to store all property URLs (to remove duplicates)
+    all_property_urls = set()
+
+    # Iterate through each page and scrape property URLs
+    for page in range(1, total_pages + 1):
+        page_url = f"{base_url}?page={page}"
+        print(page_url)
+        page_response = requests.get(page_url)
+        page_soup = BeautifulSoup(page_response.content, "html.parser")
+
+        # Find all divs with class "hot__item" and extract href from <a> tags
+        for item in page_soup.find_all("div", class_="hot__item"):
+            anchor_tag = item.find("a", href=True)
+            if anchor_tag:
+                property_url = urljoin(base_url, anchor_tag["href"])
+                all_property_urls.add(property_url)
+
+    return all_property_urls
+
+# Function to scrape data from each property URL
+def scrape_property_data(property_urls):
+    property_data = []
+
+    for property_url in property_urls:
+        property_response = requests.get(property_url)
+        property_soup = BeautifulSoup(property_response.content, "html.parser")
+
+        # Extract JSON data from <script id="jsdata"> tag
+        script_tag = property_soup.find("script", id="jsdata")
+        if script_tag:
+            script_text = script_tag.string.strip()
+            json_str = re.search(r"window\.data\s*=\s*({.*});", script_text)
+            if json_str:
+                json_data = json.loads(json_str.group(1))
+                
+                # Extract required details
+                advert = json_data.get("advert", {})
+                map_data = advert.get("map", {})
+                address_data = advert.get("address", {})
+
+                name = advert.get("title")
+                address = f"{address_data.get('city')}, {address_data.get('street')} {address_data.get('house_num')}"
+                price = advert.get("price")
+                latitude = map_data.get("lat")
+                longitude = map_data.get("lon")
+                property_type = advert.get("categoryAlias")
+                transaction_type = advert.get("sectionAlias")
+                area = advert.get("square")
+                characteristics = f"Rooms: {advert.get('rooms')}"
+
+                # Scrape description from <meta name="description">
+                meta_description_tag = property_soup.find("meta", attrs={"name": "description"})
+                description = meta_description_tag["content"] if meta_description_tag else "No description available"
+
+                details_div = property_soup.find("div", class_="offer__short-description")
+                property_details = {}
+                if details_div:
+                    for item in details_div.find_all("div", class_="offer__info-item"):
+                        title = item.find("div", class_="offer__info-title").text.strip()
+                        value = item.find("div", class_="offer__advert-short-info").text.strip()
+                        property_details[title] = value
+
+                # Append scraped data to property_data list
+                property_data.append({
+                    "URL": property_url,
+                    "Name": name,
+                    "Address": address,
+                    "Price": price,
+                    "Description": description,
+                    "Latitude": latitude,
+                    "Longitude": longitude,
+                    "Property Type": property_type,
+                    "Transaction Type": transaction_type,
+                    "Area": area,
+                    "Characteristics": characteristics,
+                    "Properties": property_details
+                })
+            else:
+                print(f"Failed to extract JSON from script content on {property_url}")
+        else:
+            print(f"No 'jsdata' script tag found on {property_url}")
+
+    return property_data
+
+# Main function to scrape URLs and data
+def main():
+    base_url = "https://krisha.kz/arenda/garazhi/"
+    property_urls = scrape_property_urls(base_url)
+
+    if property_urls:
+        print(f"Total unique property URLs found: {len(property_urls)}")
+        property_data = scrape_property_data(property_urls)
+        print(property_data)
+
+        # Convert data into a DataFrame and save to Excel
+        df = pd.DataFrame(property_data)
+        parsed_url = urlparse(base_url)
+        safe_url_name = parsed_url.netloc.replace(".", "_") + parsed_url.path.replace("/", "_")
+        excel_filename = f"{safe_url_name}.xlsx"
+
+        # Save Excel file to the 'artifacts' directory
+        os.makedirs("artifacts", exist_ok=True)
+        excel_path = os.path.join("artifacts", excel_filename)
+        df.to_excel(excel_path, index=False)
+        print(f"Data saved to {excel_path}")
+    else:
+        print("No property URLs found.")
+
+# Run the main function
 if __name__ == "__main__":
-    start_urls = [
-       'https://www.idealista.com/en/geo/venta-viviendas/andalucia/',
-        # Add more URLs as needed
-    ]
-    
-    for start_url in start_urls:
-        base_url = get_base_url(start_url)
-        transaction_type = get_transaction_type_from_url(start_url)
-        property_type = get_property_type_from_url(start_url)
-        all_links = get_anchor_tags(start_url)
-        
-        data = []
-        for link in all_links:
-            details = get_property_details(link['href'], transaction_type, property_type)
-            if details:
-                data.append(details)
-        
-        # Save data to Excel
-        df = pd.DataFrame(data)
-        sanitized_url = start_url.replace('https://', '').replace('/', '_').replace('.', '_')
-        
-        output_directory = os.path.join(os.getcwd(), 'artifacts')  # Save in 'artifacts' directory
-        os.makedirs(output_directory, exist_ok=True)
-        
-        excel_file_path = os.path.join(output_directory, f'{sanitized_url}.xlsx')
-        df.to_excel(excel_file_path, index=False)
-        print(f"Data saved to {excel_file_path}")
+    main()
