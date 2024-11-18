@@ -89,8 +89,13 @@ def scrape_property_data(property_urls):
                         value = item.find("div", class_="offer__advert-short-info").text.strip()
                         property_details[title] = value
 
-                if area == '-':
-                    area = property_details.get("м²","-")
+                if not area or area == '-' or area == '':
+                    # Try to extract from property details using potential matching keys
+                    area_keys = ["Площадь объекта, м²", "Площадь, м²", "м²", "Square"]
+                    for key in area_keys:
+                        if key in property_details:
+                            area = property_details[key]
+                            break
 
                 # Append scraped data to property_data list
                 property_data.append({
