@@ -77,8 +77,6 @@ def scrape_property_data(property_urls):
                 property_type = advert.get("categoryAlias")
                 transaction_type = advert.get("sectionAlias")
                 area = advert.get("square")
-                characteristics = f"Rooms: {advert.get('rooms')}"
-
                 # Scrape description from <meta name="description">
                 meta_description_tag = property_soup.find("meta", attrs={"name": "description"})
                 description = meta_description_tag["content"] if meta_description_tag else "No description available"
@@ -90,6 +88,9 @@ def scrape_property_data(property_urls):
                         title = item.find("div", class_="offer__info-title").text.strip()
                         value = item.find("div", class_="offer__advert-short-info").text.strip()
                         property_details[title] = value
+
+                if area == '-':
+                    area = property_details.get("м²","-")
 
                 # Append scraped data to property_data list
                 property_data.append({
@@ -103,13 +104,15 @@ def scrape_property_data(property_urls):
                     "Property Type": property_type,
                     "Transaction Type": transaction_type,
                     "Area": area,
-                    "Characteristics": characteristics,
                     "Properties": property_details
                 })
+                print(property_data)
             else:
                 print(f"Failed to extract JSON from script content on {property_url}")
         else:
             print(f"No 'jsdata' script tag found on {property_url}")
+
+    
 
     return property_data
 
