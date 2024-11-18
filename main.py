@@ -36,14 +36,18 @@ def scrape_property_urls(base_url):
         page_soup = BeautifulSoup(page_response.content, "html.parser")
 
         # Find all divs with class "hot__item" and extract href from <a> tags
-        for item in page_soup.find_all("div", class_="hot__item"):
-            anchor_tag = item.find("a", href=True)
-            if anchor_tag:
+    for page in range(1, total_pages + 1):
+            page_url = f"{base_url}?page={page}"
+            print(f"Scraping page: {page_url}")
+            page_response = requests.get(page_url)
+            page_soup = BeautifulSoup(page_response.content, "html.parser")
+
+            # Find all <a> tags with class "a-card__image" and extract href attributes
+            for anchor_tag in page_soup.find_all("a", class_="a-card__image", href=True):
                 property_url = urljoin(base_url, anchor_tag["href"])
                 all_property_urls.add(property_url)
 
     return all_property_urls
-
 # Function to scrape data from each property URL
 def scrape_property_data(property_urls):
     property_data = []
