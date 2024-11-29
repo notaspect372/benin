@@ -77,25 +77,30 @@ def scrape_property_data(property_urls):
                 property_type = advert.get("categoryAlias")
                 transaction_type = advert.get("sectionAlias")
                 area = advert.get("square")
-                # Scrape description from <meta name="description">
-                meta_description_tag = property_soup.find("meta", attrs={"name": "description"})
-                description = meta_description_tag["content"] if meta_description_tag else "No description available"
 
-                details_div = property_soup.find("div", class_="offer__short-description")
-                property_details = {}
-                if details_div:
-                    for item in details_div.find_all("div", class_="offer__info-item"):
-                        title = item.find("div", class_="offer__info-title").text.strip()
-                        value = item.find("div", class_="offer__advert-short-info").text.strip()
-                        property_details[title] = value
+                # Scrape description
+                description_div = property_soup.find("div", class_="js-description a-text a-text-white-spaces")
+                description = description_div.text.strip() if description_div else "No description available"
 
+                # Scrape features from the second 'offer__parameters'
+                offer_parameters_divs = property_soup.find_all("div", class_="offer__parameters")
+                features = []
+                if len(offer_parameters_divs) > 1:  # Ensure the second div exists
+                    parameters_div = offer_parameters_divs[1]
+                    for dl in parameters_div.find_all("dl"):
+                        key = dl.find("dt").text.strip()
+                        value = dl.find("dd").text.strip()
+                        features.append({key: value})
+
+                # Handle area extraction
                 if not area or area == '-' or area == '':
-                    # Try to extract from property details using potential matching keys
+                    # Try to extract from features using potential matching keys
                     area_keys = ["Площадь объекта, м²", "Площадь, м²", "м²", "Square"]
-                    for key in area_keys:
-                        if key in property_details:
-                            area = property_details[key]
-                            break
+                    for feature in features:
+                        for key, value in feature.items():
+                            if key in area_keys:
+                                area = value
+                                break
 
                 # Append scraped data to property_data list
                 property_data.append({
@@ -109,17 +114,15 @@ def scrape_property_data(property_urls):
                     "Property Type": property_type,
                     "Transaction Type": transaction_type,
                     "Area": area,
-                    "Properties": property_details
+                    "Features": features
                 })
                 print(property_data)
             else:
                 print(f"Failed to extract JSON from script content on {property_url}")
         else:
             print(f"No 'jsdata' script tag found on {property_url}")
-
-    
-
     return property_data
+
 
 # Main function to scrape URLs and data
 def main():
