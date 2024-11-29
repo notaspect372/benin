@@ -82,6 +82,13 @@ def scrape_property_data(property_urls):
                 description_div = property_soup.find("div", class_="js-description a-text a-text-white-spaces")
                 description = description_div.text.strip() if description_div else "No description available"
 
+                property_details = {}
+                if details_div:
+                    for item in details_div.find_all("div", class_="offer__info-item"):
+                        title = item.find("div", class_="offer__info-title").text.strip()
+                        value = item.find("div", class_="offer__advert-short-info").text.strip()
+                        property_details[title] = value
+
                 # Scrape features from the second 'offer__parameters'
                 offer_parameters_divs = property_soup.find_all("div", class_="offer__parameters")
                 features = []
@@ -94,13 +101,13 @@ def scrape_property_data(property_urls):
 
                 # Handle area extraction
                 if not area or area == '-' or area == '':
+                    # Try to extract from property details using potential matching keys
                     # Try to extract from features using potential matching keys
                     area_keys = ["Площадь объекта, м²", "Площадь, м²", "м²", "Square"]
-                    for feature in features:
-                        for key, value in feature.items():
-                            if key in area_keys:
-                                area = value
-                                break
+                    for key in area_keys:
+                        if key in property_details:
+                            area = property_details[key]
+                            break
 
                 # Append scraped data to property_data list
                 property_data.append({
@@ -113,6 +120,7 @@ def scrape_property_data(property_urls):
                     "Longitude": longitude,
                     "Property Type": property_type,
                     "Transaction Type": transaction_type,
+                    "Properties": property_details,
                     "Area": area,
                     "Features": features
                 })
