@@ -82,6 +82,9 @@ def scrape_property_data(property_urls):
                 description_div = property_soup.find("div", class_="js-description a-text a-text-white-spaces")
                 description = description_div.text.strip() if description_div else "No description available"
 
+                details_div = property_soup.find("div", class_="offer__short-description")
+
+
                 property_details = {}
                 if details_div:
                     for item in details_div.find_all("div", class_="offer__info-item"):
