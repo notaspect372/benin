@@ -265,18 +265,22 @@ for base_url in urls_to_process:
     print("Total property URLs found:", len(all_property_urls))
     
     # Prepare to save to Excel
+    # Prepare to save to Excel
     all_data = []
-
+    
     for property_url in all_property_urls:
         property_data = scrape_property_details(property_url)
         if property_data:
             all_data.append(property_data)
             # Print property data side by side with the URL
             print(property_data)
-
+    
     # Create a DataFrame with all property data
     df = pd.DataFrame(all_data)
-
+    
+    # Ensure the 'artifacts' directory exists
+    os.makedirs("artifacts", exist_ok=True)
+    
     # Save the DataFrame to the `artifacts` directory with a sanitized filename
     sanitized_filename = sanitize_filename(base_url) + ".xlsx"
     output_path = os.path.join("artifacts", sanitized_filename)
