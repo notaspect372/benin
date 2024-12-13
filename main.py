@@ -11,7 +11,7 @@ from requests.exceptions import ReadTimeout
 
 # List of URLs to process
 urls_to_process = [
-    "https://www.realestate.com.kh/buy/?active_tab=popularLocations&order_by=relevance&property_type=commercial&search_type=sale",
+    "https://www.realestate.com.kh/buy/",
     # Add more URLs as needed
 ]
 
