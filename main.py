@@ -132,7 +132,7 @@ def scrape_data(brand_array):
         print(f"Found {len(product_links)} products on {brand_url}")
 
         count = 1
-        for product_url in product_links[394:]:
+        for product_url in product_links:
             print(product_url)
             try:
                 driver.get(product_url)
