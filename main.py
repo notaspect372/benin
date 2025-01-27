@@ -132,7 +132,7 @@ def scrape_data(brand_array):
         print(f"Found {len(product_links)} products on {brand_url}")
 
         count = 1
-        for product_url in product_links:
+        for product_url in product_links[394:]:
             print(product_url)
             try:
                 driver.get(product_url)
@@ -345,7 +345,7 @@ def scrape_data(brand_array):
 
 
 # enter the brand urls here
-brands = ["https://floorscenter.com/collections/marazzi"]
+brands = ["https://floorscenter.com/collections/american-olean "]
 
 
 scrape_data(brands)
