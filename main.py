@@ -1,206 +1,351 @@
-import os
-import requests
-from bs4 import BeautifulSoup
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 import pandas as pd
-import re
 import time
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import random
+from selenium.webdriver.edge.options import Options
+import os
 
-# Function to create a requests session with retries
-def requests_session_with_retries():
-    session = requests.Session()
-    retries = Retry(total=5, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
-    session.mount('http://', HTTPAdapter(max_retries=retries))
-    session.mount('https://', HTTPAdapter(max_retries=retries))
-    return session
 
-# Create a session with retries
-session = requests_session_with_retries()
+def slow_smooth_scroll(driver, total_scroll_time=15):
+    """Perform slow and smooth scrolling on a page."""
+    scroll_height = driver.execute_script("return document.body.scrollHeight")
+    viewport_height = driver.execute_script("return window.innerHeight")
+    start_time = time.time()
+    current_position = 0
 
-# Headers with more fields to avoid 400 errors
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36',
-    'Referer': 'https://www.buysellcyprus.com',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-}
+    while time.time() - start_time < total_scroll_time:
+        # Calculate a smooth, smaller random scroll step
+        scroll_step = random.randint(50, 200)
 
-# Delay between requests
-delay_between_requests = 2  # seconds
+        # Randomly decide to scroll down or slightly up for natural behavior
+        if random.random() < 0.85:  # 85% chance to scroll down
+            current_position += scroll_step
+        else:
+            current_position -= random.randint(30, 100)  # Small upward scroll
 
-def get_property_links_from_page(url):
-    """Get property links from a single page."""
+        # Ensure the position stays within the page bounds
+        current_position = max(0, min(current_position, scroll_height - viewport_height))
+        
+        # Execute the scroll
+        driver.execute_script(f"window.scrollTo(0, {current_position});")
+        
+        # Pause slightly longer for smooth, slower behavior
+        time.sleep(random.uniform(0.2, 0.5))  # Moderate, varying delays
+
+    # Scroll back up slightly at the end for realism
+    driver.execute_script(f"window.scrollTo(0, {max(0, current_position - 300)});")
+
+
+
+def simulate_mouse_movement(driver):
+    """Simulate mouse movement to mimic human interactions."""
     try:
-        response = session.get(url, timeout=10, headers=headers)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to retrieve the page {url}. Error: {e}")
-        return set()
+        actions = ActionChains(driver)
+        element = driver.find_element(By.TAG_NAME, "body")
+        actions.move_to_element(element)
+        for _ in range(random.randint(5, 15)):
+            x_offset = random.randint(-10, 10)
+            y_offset = random.randint(-10, 10)
+            actions.move_by_offset(x_offset, y_offset).perform()
+            time.sleep(random.uniform(0.1, 0.5))
+    except Exception as e:
+        print(f"Mouse movement simulation failed: {e}")
 
-    soup = BeautifulSoup(response.content, 'html.parser')
 
-    # Find all property links
-    property_links = set()
-    for div in soup.find_all('div', class_='bs-card-title'):
-        a = div.find('a', href=True)
-        if a:
-            href = a['href']
-            if 'property' in href:
-                full_url = 'https://www.buysellcyprus.com' + href if href.startswith('/') else href
-                property_links.add(full_url)
-    return property_links
-
-def get_total_pages(url):
-    """Get the total number of pages from the first page."""
+def close_popup(driver):
+    """Check for and close the popup button if it exists."""
     try:
-        response = session.get(url, timeout=10, headers=headers)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to retrieve the page {url}. Error: {e}")
-        return 1
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "button.exit-popup__close"))
+        )
+        close_button = driver.find_element(By.CSS_SELECTOR, "button.exit-popup__close")
+        ActionChains(driver).move_to_element(close_button).click(close_button).perform()
+        print("Popup closed.")
+    except Exception:
+        pass
 
-    soup = BeautifulSoup(response.content, 'html.parser')
-    paging_div = soup.find('div', class_='paging-text paging-number')
-    if paging_div:
-        paging_text = paging_div.get_text(strip=True)
-        if 'of' in paging_text:
-            total_pages = int(paging_text.split('of')[-1].strip())
-            return total_pages
-    return 1
+def scrape_data(brand_array):
+      # Configure Edge options
+    options = Options()
+    options.add_argument("--headless")  
+    options.add_argument("--disable-gpu")  
+    options.add_argument("--no-sandbox") 
+    options.add_argument("--start-maximized")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--profile-directory=Default")
+    options.add_argument("--incognito")
 
-def get_property_data(url):
-    """Scrape detailed property data from a given property URL."""
-    try:
-        response = session.get(url, timeout=10, headers=headers)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to retrieve the property page {url}. Error: {e}")
-        return None
+    # Add desired capabilities using options
+    options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
 
-    soup = BeautifulSoup(response.content, 'html.parser')
+    # Randomize user-agent
+    user_agent = random.choice([
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+        "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:51.0) Gecko/20100101 Firefox/51.0"
+    ])
+    options.add_argument(f"user-agent={user_agent}")
 
-    # Extract name
-    name_meta = soup.find('meta', property='og:title')
-    name = name_meta['content'] if name_meta else 'N/A'
+    # Initialize the WebDriver
+    driver = webdriver.Edge(options=options)
 
-    # Extract price
-    price_div = soup.find('div', class_='bs-listing-info-price')
-    price = 'N/A'
-    if price_div:
-        price_span = price_div.find('span', class_='bs-listing-info-price-base')
-        price = price_span.get_text(strip=True) if price_span else 'N/A'
+    scraped_data = []
 
-    # Extract address
-    address_meta = soup.find('meta', itemprop='streetAddress')
-    address = address_meta['content'].replace('Cyprus', '').strip() if address_meta else 'N/A'
+    for brand_url in brand_array:
+        page = 1
+        product_links = []
 
-    # Extract description
-    description_div = soup.find('div', class_='bs-listing-info-description-main')
-    description = 'N/A'
-    if description_div:
-        description_p = description_div.find('p', class_='description-text')
-        description = description_p.get_text(strip=True) if description_p else 'N/A'
+        while True:
+            driver.get(f"{brand_url}?page={page}")
 
-    # Extract characteristics
-    characteristics = {}
-    characteristics_div = soup.find('div', class_='bs-listing-info-features-main')
-    if characteristics_div:
-        characteristics_list = characteristics_div.find_all('li')
-        for item in characteristics_list:
-            key_value = item.get_text(strip=True).split(':')
-            if len(key_value) == 2:
-                key = key_value[0].strip()
-                value = key_value[1].strip()
-                characteristics[key] = value
+            # Human-like interaction
+            time.sleep(random.uniform(2, 5))
+            close_popup(driver)
+            time.sleep(2)
+            slow_smooth_scroll(driver, total_scroll_time=5)  # Scroll for 5 seconds
+            simulate_mouse_movement(driver)
+            
 
-    # Determine property type
-    property_type = ''
-    keywords = [
-        'Apartment', 'House', 'Hotel', 'Land', 'Residential', 'Commercial', 'Industrial', 'Farm'
-    ]
+            try:
+                products = driver.find_elements(By.CSS_SELECTOR, "a.product-item__image-wrapper")
+                if not products:
+                    break
 
-    name_lower = name.lower()
-    for keyword in keywords:
-        if keyword.lower() in name_lower:
-            property_type = keyword
-            break
+                for product in products:
+                    href = product.get_attribute("href")
+                    product_links.append(href)
 
-    # Extract transaction type from URL
-    transaction_type = 'rent' if 'for-rent' in url else 'buy'
+                page += 1
+            except Exception as e:
+                print(f"Error collecting product links on page {page}: {e}")
+                break
 
-    # Extract area
-    area = characteristics.get('Total covered area', characteristics.get('Plot', 'N/A'))
+        print(f"Found {len(product_links)} products on {brand_url}")
 
-    # Get latitude and longitude
-    geolocator = Nominatim(user_agent="property_scraper")
-    latitude, longitude = 'N/A', 'N/A'
-    try:
-        location = geolocator.geocode(address, timeout=10)
-        if location:
-            latitude, longitude = location.latitude, location.longitude
-    except GeocoderTimedOut:
-        print(f"Geocoding timed out for address: {address}")
+        count = 1
+        for product_url in product_links:
+            print(product_url)
+            try:
+                driver.get(product_url)
+                time.sleep(3)
 
-    # Combine all data into a dictionary
-    property_data = {
-        'url': url,
-        'name': name,
-        'address': address,
-        'price': price,
-        'description': description,
-        'property_type': property_type,
-        'transaction_type': transaction_type,
-        'area': area,
-        'characteristics': characteristics,
-        'latitude': latitude,
-        'longitude': longitude,
-    }
-    return property_data
+                driver.execute_script("window.scrollBy(0, 100)")
 
-def scrape_properties(base_url):
-    total_pages = get_total_pages(base_url.format(1))
-    print(f"Total number of pages: {total_pages}")
+                title = driver.find_element(By.CSS_SELECTOR, "h1.product-meta__title.heading.h1").text.strip()
 
-    all_property_links = set()
-    for page in range(1, total_pages + 1):
-        page_url = base_url.format(page)
-        property_links = get_property_links_from_page(page_url)
-        all_property_links.update(property_links)
-        print(f"Scraped {len(property_links)} properties from page {page}")
-        time.sleep(delay_between_requests)
+                handle = product_url.split('/')[-1].split('?')[0]
 
-    all_property_data = []
-    for link in all_property_links:
-        property_data = get_property_data(link)
-        if property_data:
-            all_property_data.append(property_data)
-            print(f"Scraped data for property: {property_data['name']}")
-            time.sleep(delay_between_requests)
+                variations = driver.find_elements(By.CSS_SELECTOR, ".variant-swatch__radio")[::-1]
+                num_variations = len(variations)
 
-    return all_property_data
+                image_elements = driver.find_elements(By.CSS_SELECTOR, ".product-gallery__thumbnail img")
+                all_image_src = [img.get_attribute("src") for img in image_elements]
 
-def main(urls):
-    output_dir = "artifacts"
+                filtered_images = all_image_src[:len(all_image_src) - num_variations]
+                variation_images = all_image_src[-num_variations:][::-1]  # Reverse variation images
+
+                breadcrumb_type = ""
+                try:
+                    breadcrumb_type = driver.find_element(
+                        By.CSS_SELECTOR, "li.breadcrumb__item a[href*='types']"
+                    ).text.strip()
+                except:
+                    pass
+
+                vendor = driver.find_element(By.CSS_SELECTOR, "a.product-meta__vendor").text.strip()
+
+                option1_value = driver.find_element(By.CSS_SELECTOR, "span.block-swatch__item-text").text.strip()
+
+                product_description_box = ""
+                try:
+                    seo_description_element = driver.find_element(By.CSS_SELECTOR, "div.rte.text--pull > p")
+                    product_description_box = seo_description_element.text.strip()
+                except:
+                    pass
+
+                price_per_sq_ft_text = ""
+                try:
+                    price_per_sq_ft_element = driver.find_element(By.CSS_SELECTOR, "span.price.price--highlight")
+                    price_per_sq_ft_text = price_per_sq_ft_element.text.strip().replace("Sale price", "").strip()
+                except:
+                    pass
+
+                coverage_area = ""
+                try:
+                    coverage_area_text = driver.find_element(By.ID, "boxCoverage").text.strip()
+                    coverage_area = coverage_area_text.split(":")[1].split()[0]
+                except:
+                    pass
+
+                pcs_per_box = ""
+                try:
+                    pcs_per_box_text = driver.find_element(By.ID, "pcsPerCarton").text.strip()
+                    pcs_per_box = pcs_per_box_text.split(":")[1].strip()
+                except:
+                    pass
+
+                original_price = ""
+                try:
+                    original_price_text = driver.find_element(By.CSS_SELECTOR, "span.price.price--compare").text.strip()
+                    original_price = original_price_text.replace("Regular price", "").strip()
+                except:
+                    pass
+
+                application = ""
+                usage = ""
+                try:
+                    application = driver.find_element(By.XPATH, "//tr[th[contains(text(), 'Application:')]]").text.strip()
+                    application = application.split(':', 1)[1].strip()
+                except:
+                    pass
+
+                try:
+                    usage = driver.find_element(By.XPATH, "//tr[th[contains(text(), 'Usage:')]]").text.strip()
+                    usage = usage.split(':', 1)[1].strip()
+                except:
+                    pass
+
+                tags = ", ".join(filter(None, [application, usage]))
+
+                surface_attribute = ""
+                try:
+                    surface_type = driver.find_element(By.XPATH, "//tr[th[contains(text(), 'Surface Type:')]]").text.strip()
+                    surface_attribute = surface_type.split(':', 1)[1].strip()
+                except:
+                    pass
+
+                image_positions = list(range(1, len(filtered_images) + 1))
+                for idx, variation in enumerate(variations):
+                    label = driver.find_element(By.CSS_SELECTOR, f"label[for='{variation.get_attribute('id')}']")
+
+                    ActionChains(driver).move_to_element(label).perform()
+                    WebDriverWait(driver, 10).until(EC.element_to_be_clickable(label)).click()
+                    time.sleep(2)  
+
+                    current_url = driver.current_url
+                    variant_id = current_url.split("variant=")[-1]
+
+                    variation_name = variation.get_attribute("value")
+                    option2_value = driver.find_element(By.CSS_SELECTOR, "span.product-form__selected-value").text.strip()
+                    variant_sku = driver.find_element(By.CSS_SELECTOR, "span.product-meta__sku-number").text.strip()
+                    variant_price = driver.find_element(By.CSS_SELECTOR, "span.box-price-pcsPerCarton").get_attribute("data-price")
+                    variant_compare_price = driver.find_element(By.CSS_SELECTOR, "span.box-price-pcsPerCarton").get_attribute("data-compare-price")
+
+                    variant_barcode = ""
+                    try:
+                        variant_barcode = driver.find_element(By.CSS_SELECTOR, "tr.table-row-spec.barcode-container.d-none").get_attribute("data-value")
+                    except:
+                        pass
+
+                    weight = ""
+                    try:
+                        weight_container = driver.find_element(By.XPATH, "//tr[th[contains(text(), 'Weight:')]]")
+                        weight = weight_container.find_element(By.CSS_SELECTOR, "td.spec-values").text.strip()
+                    except:
+                        pass
+
+                    rows = driver.find_elements(By.CSS_SELECTOR, f"tr[data-id='{variant_id}']")
+                    tr_tags_html = [row.get_attribute("outerHTML") for row in rows]
+
+                    relevant_table_html = "<table>"
+
+                    for tr_tag in tr_tags_html:
+                        relevant_table_html += tr_tag
+
+                    fields_to_append = [
+                        "Weight", "Length", "Thickness", "Collection", "Composition",
+                        "Design", "Ends", "Edges", "Surface Type", "Installation Type",
+                        "Usage", "Application"
+                    ]
+
+                    for field in fields_to_append:
+                        try:
+                            row_html = driver.find_element(By.XPATH, f"//tr[th[contains(text(), '{field}:')]]").get_attribute("outerHTML")
+                            relevant_table_html += row_html
+                        except Exception as e:
+                            print(f"Field '{field}' not found. Skipping. Error: {e}")
+
+                    relevant_table_html += "</table>"
+
+                    seo_description_element = driver.find_element(By.CSS_SELECTOR, "div.rte.text--pull > p")
+                    variant_description = seo_description_element.text.strip()
+
+                    scraped_data.append({
+                        "Handle": handle,
+                        "Title": title,
+                        "Variation": variation_name,
+                        "Body (HTML)": relevant_table_html,
+                        "Vendor": vendor,
+                        "Type": breadcrumb_type,
+                        "Tags": tags,
+                                                    "Option1 Name": "Color",
+                        "Option1 Value": option2_value,
+                                                    "Option2 Name": "Size",
+
+                        "Option2 Value": option1_value,
+                        "Variant SKU": variant_sku,
+                                                    "Variant Grams": " ",
+                                        "Variant Inventory Tracker": "shopify",
+            "Variant Inventory Qty": "50000",
+                                        "Variant Inventory Policy": "deny",
+                                        "Variant Fulfillment Service": "manual",
+                        "Variant Price": variant_price,
+                        "Variant Compare At Price": variant_compare_price,
+                                        "Variant Requires Shipping": "TRUE",
+                                            "Variant Taxable": "TRUE",
+                                        "Variant Barcode": variant_barcode,
+                                                                    "Variant Weight Unit":" ",
+                                        "Gift Card": "FALSE",
+
+                        "Weight": weight,
+                        "SEO Title": title,
+                        "Product description box = Product Details Field (product.metafields.custom.product_details_field)": product_description_box,
+                        "Google Shopping / Condition": " ",
+                                        "Status": "active",
+                                                                    "Variant Description": variant_description,
+
+                        "Coverage Area (product.metafields.custom.coverage_area)": coverage_area,
+                        "pcsperbox (product.metafields.custom.pcsperbox)": pcs_per_box,
+                        "Price Per Sq Ft (product.metafields.custom.price_per_sq_ft)": price_per_sq_ft_text,
+                        "Image Src": filtered_images[idx] if idx < len(filtered_images) else "",
+                        "Variant Image": variation_images[idx] if idx < len(variation_images) else "",
+                        "Image Position": image_positions[idx] if idx < len(image_positions) else None,
+                        "Original Price": original_price,
+                        "Surface Type (product.metafields.custom.surface_type)": surface_attribute,
+                    })
+
+                print(f"Scraped product {count}: {option2_value}")
+                count += 1
+
+            except Exception as e:
+                print(f"Error scraping product {product_url}: {e}")
+
+    df = pd.DataFrame(scraped_data)
+    df.to_excel("scraped_data.xlsx", index=False, engine='openpyxl')
+
+    output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Save the Excel file
+    output_file = os.path.join(output_dir, "scraped_data.xlsx")
+    df.to_excel(output_file, index=False, engine='openpyxl')
+    
+    print(f"Scraped data saved to {output_file}")
 
-    for url in urls:
-        base_url = re.sub(r'page-\d+', 'page-{}', url)
-        property_data = scrape_properties(base_url)
+    driver.quit()
 
-        df = pd.DataFrame(property_data)
-        print(df)
 
-        file_name = re.sub(r'\W+', '_', url) + '.xlsx'
-        file_path = os.path.join(output_dir, file_name)
-        df.to_excel(file_path, index=False)
-        print(f"Data saved to {file_path}")
+# enter the brand urls here
+brands = ["https://floorscenter.com/collections/marazzi"]
 
-urls = [
-    'https://www.buysellcyprus.com/properties-for-rent/cur-usd/no-nearby/type-house/price-0-4450/sort-ru/page-1',
-]
 
-if __name__ == "__main__":
-    main(urls)
+scrape_data(brands)
