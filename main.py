@@ -103,33 +103,33 @@ def scrape_data(brand_array):
     for brand_url in brand_array:
         page = 1
         product_links = []
-
-      while page <= num_pages_to_scrape:
-                driver.get(f"{brand_url}?page={page}")
+        
+        while page <= num_pages_to_scrape:
+            driver.get(f"{brand_url}?page={page}")
     
-                # Human-like interaction
-                time.sleep(random.uniform(2, 5))
-                close_popup(driver)
-                time.sleep(2)
-                slow_smooth_scroll(driver, total_scroll_time=5)  # Scroll for 5 seconds
-                simulate_mouse_movement(driver)
-                
-                try:
-                    products = driver.find_elements(By.CSS_SELECTOR, "a.product-item__image-wrapper")
-                    if not products:
-                        break
-    
-                    for product in products:
-                        href = product.get_attribute("href")
-                        product_links.append(href)
-    
-                    print(f"Scraped {len(products)} products from page {page}.")
-                    page += 1
-                except Exception as e:
-                    print(f"Error collecting product links on page {page}: {e}")
+            # Human-like interaction
+            time.sleep(random.uniform(2, 5))
+            close_popup(driver)
+            time.sleep(2)
+            slow_smooth_scroll(driver, total_scroll_time=5)  # Scroll for 5 seconds
+            simulate_mouse_movement(driver)
+            
+            try:
+                products = driver.find_elements(By.CSS_SELECTOR, "a.product-item__image-wrapper")
+                if not products:
                     break
     
-            print(f"Found {len(product_links)} products on {brand_url}.")
+                for product in products:
+                    href = product.get_attribute("href")
+                    product_links.append(href)
+    
+                print(f"Scraped {len(products)} products from page {page}.")
+                page += 1
+            except Exception as e:
+                print(f"Error collecting product links on page {page}: {e}")
+                break
+    
+        print(f"Found {len(product_links)} products on {brand_url}.")
 
         count = 1
         for product_url in product_links:
