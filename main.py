@@ -103,9 +103,10 @@ def scrape_data(brands, num_pages_to_scrape):      # Configure Edge options
         page = 1
         product_links = []
         
-        while page <= num_pages_to_scrape:
+        for page in range(start_page, end_page + 1):
+            print(f"Scraping page {page} of {brand_url}")
             driver.get(f"{brand_url}?page={page}")
-    
+        
             # Human-like interaction
             time.sleep(random.uniform(2, 5))
             close_popup(driver)
@@ -116,18 +117,18 @@ def scrape_data(brands, num_pages_to_scrape):      # Configure Edge options
             try:
                 products = driver.find_elements(By.CSS_SELECTOR, "a.product-item__image-wrapper")
                 if not products:
+                    print(f"No products found on page {page}. Ending scrape.")
                     break
-    
+        
                 for product in products:
                     href = product.get_attribute("href")
                     product_links.append(href)
-    
+        
                 print(f"Scraped {len(products)} products from page {page}.")
-                page += 1
             except Exception as e:
                 print(f"Error collecting product links on page {page}: {e}")
                 break
-    
+
         print(f"Found {len(product_links)} products on {brand_url}.")
 
         count = 1
@@ -346,6 +347,7 @@ def scrape_data(brands, num_pages_to_scrape):      # Configure Edge options
 # enter the brand urls here
 brands = ["https://floorscenter.com/collections/daltile"]
 
-num_pages_to_scrape = 1
+start_page = 1
+end_page = 1
 
-scrape_data(brands, num_pages_to_scrape)
+scrape_data(brands, start_page, end_page)
