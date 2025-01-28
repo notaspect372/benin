@@ -99,7 +99,7 @@ def scrape_data(brands, num_pages_to_scrape):      # Configure Edge options
 
     scraped_data = []
 
-    for brand_url in brand_array:
+    for brand_url in brands:
         page = 1
         product_links = []
         
