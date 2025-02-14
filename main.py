@@ -44,7 +44,7 @@ def get_property_urls(base_url, start_page, end_page):
             break
 
         soup = BeautifulSoup(response.content, 'html.parser')
-        page_property_urls = ['https://ga.coinafrique.com' + link.get('href') for link in soup.find_all('a', class_='card-image ad__card-image waves-block waves-light')]
+        page_property_urls = ['https://bj.coinafrique.com' + link.get('href') for link in soup.find_all('a', class_='card-image ad__card-image waves-block waves-light')]
 
         if not page_property_urls:
             print(f"No more property URLs found on page {page}. Stopping.")
